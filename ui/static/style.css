@@ -1,0 +1,16 @@
+body {
+  font-family: 'Helvetica Neue', Helvetica, sans-serif;
+}
+
+div#main {
+  width: 500px;
+  margin-top: 25px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+input {
+  vertical-align: middle;
+  height: 100%;
+}

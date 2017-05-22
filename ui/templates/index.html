@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" type="text/css" href="static/style.css">
+  <script src="static/jquery-1.12.0.min.js"></script>
+</head>
+<body>
+  <div id="main">
+    <h2>boostcamphq rate-o-tron</h2>
+    <div id="imbox" style="width:175px; margin: auto;">
+      <image src="{{image}}" width="150" /><br>
+      <!-- buttons for rating -->
+      <div id="buttons" style="width: 175px; margin-top: 10px;">
+        <div style="display: inline-block; height: 100%;">
+          <input type="image" src="static/tinder_1.png" 
+          style="opacity: 0.2;" value="0" />
+          <input type="image" src="static/tinder_2.png" 
+          style="opacity: 0.4;" value="1" />
+          <input type="image" src="static/tinder_3.png"
+          style="opacity: 0.6;" value="2" />
+          <input type="image" src="static/tinder_4.png"
+          style="opacity: 0.8;" value="3" />
+          <input type="image" src="static/tinder_5.png"
+          style="opacity: 1.0;" value="4" />
+        </div>
+      </div>
+    </div>
+    <br><br>
+    <div id="preference">
+      {% for rec in recs %}
+      <image src="{{rec}}" width="75" />
+      {% endfor %}
+    </div>
+  </div>
+</body>
+
+<script>
+  $(document).ready(function() {
+    $('input').click(function(v) {
+      // make a post request
+      let val = v.target.value;
+
+      $.post("/", { 'button_press': val })
+        .done(function(data) {
+          window.location = '/';
+        }); 
+    });
+  });
+</script>
