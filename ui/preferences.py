@@ -12,6 +12,8 @@ imroot = 'static/data/all/'
 fpaths = None
 embed = None
 
+seen_images = set()
+
 user_scores = []
 last_image_shown = None
 user_center_estimate = None
@@ -23,14 +25,32 @@ def fix_fpath(fpath):
     return imroot+fpath.split('/')[-1]
 
 def get_next_image():
-    global last_image_shown
-    # get a random image
-    randint = np.random.randint(0, len(fpaths))
+    global last_image_shown, seen_images
+
+    selection = None
+
+    if user_center_estimate is None:
+        # get a random image
+        selection = np.random.randint(0, len(fpaths))
+
+    else:
+        # get an image near cluster center
+        dist, ind = nn_tree.query([user_center_estimate], k=100)
+        ind = ind[0]
+
+        # TODO: hack
+        selection = ind[0]
+        j = 0
+        while selection in seen_images:
+            j += 1
+            selection = ind[j]
 
     # we need this to get the center
-    last_image_shown = randint
+    last_image_shown = selection
 
-    next_image = fix_fpath(fpaths[randint])
+    seen_images.add(last_image_shown)
+
+    next_image = fix_fpath(fpaths[selection])
 
     return next_image
 
@@ -38,11 +58,8 @@ def get_recs():
     if user_center_estimate is None:
         return []
     else:
-        print user_center_estimate
         dist, ind = nn_tree.query([user_center_estimate], k=6)
-        # throw out the first result
-        print ind
-        print fpaths[ind[0][1]]
+        # throw out the first result (duplicate)
         return [fix_fpath(fpaths[i]) for i in ind[0][1:]]
 
 def update_user_center_estimate(score):
@@ -50,10 +67,14 @@ def update_user_center_estimate(score):
 
     # highest score is 4 (good), lowest is 0 (bad)
     # super hacky TODO
-    if score > 0:
+    if score > 2:
+        # 1 for 4, 1/2 for 3, 1/4 for 2
         score = 1.0/(5-score)
-        user_scores.append(score*embed[last_image_shown,:])
-        user_center_estimate = np.array(reduce(lambda x,y: x+y, user_scores))
+    else: # penalize (SUPER HACKY)
+        # -1 for 0, -1/2 for 1
+        score = -1.0/(1+score)
+    user_scores.append(score*embed[last_image_shown,:])
+    user_center_estimate = np.array(reduce(lambda x,y: x+y, user_scores))
 
 #================================================ Flask logic
 
