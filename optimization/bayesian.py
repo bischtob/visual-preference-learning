@@ -4,44 +4,40 @@ import numpy as np
 from sklearn.base import BaseEstimator
 
 class BOE(BaseEstimator):
-    def __init__(self, domain,  ac_func='MPI'):
+    def __init__(self, x_init, y_init, domain,  T_init=2.0, ac_func='MPI'):
         self.domain = [{'name':'prompt', 'type':'bandit', 'domain':domain}] # domain to optimize over
         self.ac_func = ac_func # aquisition function
-        self._X = None
-        self._Y = None
-        self.next_sample = None
+        self._X = x_init
+        self._Y = y_init
+        self._T = T_init
 
     def get_params(self, deep=True):
-        return { "domain": self.domain, "model":self.ac_func}
+        return {"domain": self.domain, "model":self.ac_func}
 
     def set_params(self, **parameters):
         for parameter, value in parameters.items():
             self.parameter = value
         return self
 
-    def optimize(self, x, y):
+    def next(self):
         # Functions handles the actual GP optimization via GPyOpt
-        # Update the sampling history
-        self._update_history(x,y)
+        # Evaluate the model with simulated annealing
+        if np.random.rand() < np.exp(-self._T):
+            self.model = GPyOpt.methods.BayesianOptimization(f = None, 
+                                                             X = self._X, 
+                                                             Y = self._Y,
+                                                             domain=self.domain,
+                                                             acquisition_type=self.ac_func)
+            return self.model.suggested_sample
+        else: 
+            # Update the annealing temperature and return random sample
+            self._T = 0.65*self._T
+            ind = np.random.randint(0, self.domain[0]['domain'].shape[0])
+            return self.domain[0]['domain'][ind,:] 
 
-        # Evaluate the model
-        self.model = GPyOpt.methods.BayesianOptimization(f = lambda x: np.ones((x.shape[0],1)), 
-                                                         X = self._X, 
-                                                         Y = self._Y,
-                                                         normalize_Y=False,
-                                                         domain=self.domain,
-                                                         acquisition_type=self.ac_func)
-
-        # Update the next sample to evaluate model on
-        self.next_sample = self.model.suggested_sample[-1,:]
-
-    def _update_history(self, x, y):
-        if self._X is not None and self._Y is not None:
-            self._X = np.vstack([self._X, x])
-            self._Y = np.vstack([self._Y, y])
-        else:
-            self._X = x
-            self._Y = y
+    def update_history(self, x, y):
+        self._X = np.vstack((self._X, x))
+        self._Y = np.vstack((self._Y, y))
 
 if __name__ == "__main__":
     pass
