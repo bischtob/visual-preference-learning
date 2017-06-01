@@ -1,0 +1,17 @@
+Replication steps:
+
+1. Copy the image folder 'all' to 'static/data/all'.
+   The images need to be in the "static" folder so that the 
+   server can actually reference them (if they exist elsewhere 
+   on the filesystem, the browser will complain since it's 
+   technically a cross-origin request.) 
+   
+   I didn't commit this to git since it's huge.
+
+2. Consume the 'requirements.txt' file
+
+3. Run 'export FLASK_APP=server.py' (set the FLASK_APP environment variable)
+
+4. Run 'python -m flask run'
+
+5. Point your browser to 127.0.0.1:5000 or wherever addr it tells you.

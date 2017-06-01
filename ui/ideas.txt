@@ -1,4 +1,0 @@
-+ some kind of modified online kmeans / GMM
-  getting the exploration part right will be really interesting!
-
-+ user tokens (less an idea and more a necessity)
