@@ -18,14 +18,7 @@ from scipy.spatial import KDTree
 import operator
 from PIL import Image
 
-fn = 'saved_kmeans_clusters/kmeans_clusters.npz'
-kmeans = np.load(fn)['kmeans']
-
-fn = '../ui/static/cnn_embedding.npz'
-dat = np.load(fn)
-(fpaths, coordinates) = (dat['fpaths'], dat['emb'])
-
-tree = KDTree(kmeans)
+from utils import initial_loading, localize_image_path
 
 def _score_func(coordinate, tree):
     # find nearest mean
@@ -47,16 +40,13 @@ def detect_outliers(kmeans, coordinates):
 
     return sorted(scores, key=operator.itemgetter(1), reverse=True)
 
-def _localize_image_path(fpath):
-    return os.path.join('../ui/static/data/all/', 
-                        fpath.split('/')[-1])
-
 # small scale test
-num = 0
-for im,score in detect_outliers(kmeans, coordinates)[:100]:
-    print score
-    fpath = _localize_image_path(fpaths[im])
-    im = Image.open(fpath)
-    im.save('outliers/out_'+str(num).zfill(3)+'.png', 'PNG')
-    num += 1
+def small_test():
+    num = 0
+    for im,score in detect_outliers(kmeans, coordinates)[:100]:
+        print score
+        fpath = localize_image_path(fpaths[im])
+        im = Image.open(fpath)
+        im.save('outliers/out_'+str(num).zfill(3)+'.png', 'PNG')
+        num += 1
 

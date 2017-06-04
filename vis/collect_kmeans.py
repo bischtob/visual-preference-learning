@@ -20,6 +20,8 @@ from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 import os
 
+from utils import initial_loading, localize_image_path
+
 
 def collect_kmeans(cnn_embedding, n_clusters, out_dir):
     """
@@ -37,17 +39,19 @@ def collect_kmeans(cnn_embedding, n_clusters, out_dir):
     # return centers as well, in case you want to do something with them
     return kmeans.cluster_centers_
 
-def _plot_nearest(pt, tree):
+def _plot_nearest(pt, tree, tile_width):
 
-    dist, ind = tree.query([pt], k=50)
+    # find tile_width*tile_width nearest
+    dist, ind = tree.query([pt], k=tile_width**2)
     
     indices = ind[0][:]
     
     image_tile = []
     
-    for i in range(5):
-        k = i*10
-        image_tile.append([Image.open(fpaths[j]) for j in indices[k:k+10]])
+    # create tile_width x tile_width array
+    for i in range(tile_width):
+        k = i*tile_width
+        image_tile.append([Image.open(localize_image_path(fpaths[j])) for j in indices[k:k+tile_width]])
     
     im_size = image_tile[0][0].size
     total_width,total_height = (len(image_tile)*im_size[0],len(image_tile[0])*im_size[1])
@@ -63,10 +67,10 @@ def _plot_nearest(pt, tree):
         y_offset = 0
         x_offset += im_size[0]
     
-    new_im.show()
+    return new_im
 
 
-def visualize_centers(kmeans_centers, cnn_embedding):
+def visualize_centers(kmeans_centers, cnn_embedding, tile_width=3):
     """
     Given kmeans centers and the CNN embedding 
     coordinates, produces a visualization of 
@@ -81,8 +85,9 @@ def visualize_centers(kmeans_centers, cnn_embedding):
 
     # each call to plot_nearest does an image.show()
     # so you're getting kmeans_centers
-    for c in kmeans_centers:
-        _plot_nearest(c, tree)
+    for i,c in enumerate(kmeans_centers):
+        im = _plot_nearest(c, tree, tile_width)
+        im.save('centers/'+str(i).zfill(3)+'.png', 'PNG')
 
 
 def load_cnn_embedding(path_to_cnn_embedding):
@@ -120,3 +125,6 @@ def collect_pca(cnn_embedding, n_components=100):
     print(pca.explained_variance_ratio_)
 
 
+if __name__ == '__main__':
+    (fpaths, coordinates, kmeans) = initial_loading()
+    visualize_centers(kmeans, coordinates)
