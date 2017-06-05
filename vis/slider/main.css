@@ -1,0 +1,70 @@
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.info_block {
+  margin: 20px auto 20px; /* means lr is auto */
+  width: 400px;
+  display: block;
+  text-align: center;
+  font-family: Courier, sans-serif; /* monospace */
+}
+
+.slider {
+    width: 40%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.slick-slide {
+  margin: 0px 20px;
+}
+
+.slick-slide img {
+  width: 100%;
+}
+
+.slick-prev:before,
+.slick-next:before {
+    color: black;
+}
+/* we need something inside so border-radius
+ * doesn't behave improperly */
+
+
+/* k-means selection buttons */
+.kselect {
+  /* styling stuff for a */
+  color: white;
+  text-decoration: none;
+
+  /* behavior */
+  border-radius: 50%;
+  width: 55px;
+  background-color: #333232; 
+/*  background-color: #5d5c5c; */
+
+  font-weight: bold;
+  display: inline-block;
+  cursor: pointer;
+
+  margin-left: 7.5px;
+  margin-right: 7.5px;
+}
+.kselect:hover {
+  background-color: black;
+}
+
+.kselect span {
+  text-align: center;
+  font-size: 12px;
+  line-height: 55px; /* matches width in numCircle */
+  /* was 35 with just the number */
+  display: inline;
+}
+
