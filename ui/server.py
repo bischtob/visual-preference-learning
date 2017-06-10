@@ -21,6 +21,7 @@ data = {'imroot':'static/data/all/',
 user = {'means':None,
         'counts':None,
         'scores':None,
+        'score_prediction_error':None,
         'seen_images':set(),
         'seen':None,
         'index':None,
@@ -45,7 +46,7 @@ def get_next_image():
 
 
 def localize_image_path(fpath):
-    return data['imroot']+fpath.split('/')[-1]
+    return data['imroot']+fpath.split('/')[-1][:-4] + ".jpg"
 
 
 def sample_user_taste():
@@ -69,6 +70,11 @@ def update_user_taste(score):
     """
     global data, user
 
+    # print current score and prediction
+    print("user score is: " + str(score))
+    if user["score_prediction_error"] is not None:
+        print("user score prediction error is: " + str(user["score_prediction_error"]))
+
     # update user's seen images
     if user['seen'] is None:
         user['seen'] = user['newest_image']
@@ -88,6 +94,7 @@ def update_user_taste(score):
         is_rand = True
     else:
         (is_rand, user['temp']) = is_random_step(user['temp'])
+    print("evaluation step is random: " + str(is_rand))
 
     # follow that step
     if is_rand:
@@ -100,12 +107,20 @@ def update_user_taste(score):
         myProblem = GPyOpt.methods.BayesianOptimization(f = None,
                                                         X = user['seen'],
                                                         Y = user['scores'],
+                                                        normalize_Y = False,
                                                         domain=domain)
 
         # get next suggested sample
         # (so we don't need to persist the GPyOpt problem)
 
         user['newest_image'] = myProblem.suggested_sample
+        
+        # add score prediction to user object
+        mean_prediction, std_prediction = myProblem.model.predict(myProblem.suggested_sample)
+        if user['score_prediction_error'] is None:
+            user['score_prediction_error'] = np.atleast_2d(score-mean_prediction)
+        else:
+            user['score_prediction_error'] = np.vstack([user['score_prediction_error'], score-mean_prediction])
 
 def is_random_step(t, c=0.65):
     """
