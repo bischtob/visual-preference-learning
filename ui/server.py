@@ -90,7 +90,6 @@ def get_newest_image_path():
 
     img = Images.query.get(user.newest_image)
 
-    print 'get newest image path'
     print img.fpath
     
     return img.fpath
@@ -155,10 +154,14 @@ def update_gpyopt(x, y):
     # name doesn't matter
     domain = [{'name':'x', 'type':'bandit', 'domain':coords}]
 
+    print x.shape
+    print y.shape
+
     # f is not needed. Our problem is defined solely by X and Y.
     myProblem = GPyOpt.methods.BayesianOptimization(f = None, 
                                                     X = x,
                                                     Y = y,
+                                                    normalize_Y = False,
                                                     domain=domain)
 
     # get next suggested sample here, so we don't have to persist GPyOpt object.
