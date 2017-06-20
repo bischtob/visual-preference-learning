@@ -67,10 +67,24 @@ def get_img_from_scores(user_scores):
     we need the images to be in the same order as the scores
     """
     coords = []
+
+    ids_seen = [] # debugging - this is correct.
+    image_ids_seen = []
     for score in user_scores:
+        ids_seen.append(score.image_id)
+
+        # score.image_id is the correct id.
+        # somehow the returned image is wrong.
         img = Images.query.get(score.image_id)
+
+        image_ids_seen.append(img.id)
+
         coord = img.coord
         coords.append(coord)
+
+    print ids_seen
+    print image_ids_seen
+    print np.array(coords)[:,:5]
 
     return np.array(coords)
 
@@ -108,6 +122,7 @@ def sample_user_taste():
 def get_current_user(uid):
     return User.query.get(uid)
 
+
 def is_random_step(init_thresh = 3):
     """
     if user has seen fewer than 3 images, always random step.
@@ -117,10 +132,7 @@ def is_random_step(init_thresh = 3):
 
     n_seen_img = len(Score.query.filter_by(user_id=user.id).all())
 
-    print n_seen_img
-
     if n_seen_img < init_thresh:
-        print 'hi' # should print x3
         return True
     else:
         # does this modify the database entry?
@@ -130,6 +142,7 @@ def is_random_step(init_thresh = 3):
         db.session.commit()
     
         return is_rand
+
 
 def annealing_step(t, c=0.65):
     """
@@ -143,7 +156,6 @@ def annealing_step(t, c=0.65):
         return (True, t*c)
 
 
-
 def update_gpyopt(x, y):
     """
     Run GPyOpt with the current x and y. Return suggested_sample, 
@@ -153,12 +165,8 @@ def update_gpyopt(x, y):
     """
     coords = np.array([img.coord for img in Images.query.all()])
 
-
     # name doesn't matter
-    domain = [{'name':'x', 'type':'bandit', 'domain':coords}]
-
-    print x.shape
-    print y.shape
+    domain = [{'name':'whocares', 'type':'bandit', 'domain':coords}]
 
     # f is not needed. Our problem is defined solely by X and Y.
     myProblem = GPyOpt.methods.BayesianOptimization(f = None, 
@@ -169,12 +177,16 @@ def update_gpyopt(x, y):
 
     # get next suggested sample here, so we don't have to persist GPyOpt object.
     gpy_next = myProblem.suggested_sample
+    print 'suggested sample'
+    print gpy_next
 
     # use nearest-neighbor to get next sample.
     dat,ind = nn_tree.query(gpy_next, k=1)
 
-    # convert ndarray with one entry to int
-    return ind[0]
+    print dat, ind
+
+    # database is 1-indexed, so we need to add one.
+    return ind[0]+1
 
 
 def update_user_taste(score):
@@ -184,6 +196,7 @@ def update_user_taste(score):
     user = get_current_user(session.get('user_id'))
 
     # create a new "Score" entry
+
     db.session.add(Score(user_id=user.id, score=score, image_id=user.newest_image))
     db.session.commit()
 
@@ -206,8 +219,9 @@ def update_user_taste(score):
         # run gpyopt and get next suggestion
         user.newest_image = update_gpyopt(images, scores)
 
+    # NOTE: both update_gpyopt and uniform_random_image 
+    # must return 1-indexed values!
 
-    print user.newest_image    
     # in all cases commit changes to database
     db.session.commit()
     
@@ -240,7 +254,8 @@ def uniform_random_image():
     n_imgs = db.session.query(Images).count()
     newest_image = np.random.randint(0, n_imgs)
 
-    return newest_image
+    # database is 1-indexed
+    return newest_image+1
 
 
 def initialize_data():
