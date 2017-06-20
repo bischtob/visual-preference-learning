@@ -12,8 +12,10 @@ Replication steps:
 
 3. Run 'export FLASK_APP=server.py' (set the FLASK_APP environment variable)
 
-4. run './dbscripts/add_images_db.py' (adds image data to the database that server.py uses)
+4. check that localize_image_path in server.py has the correct image extension, etc.
 
-5. Run 'python -m flask run'
+5. run 'add_images_db.py' (adds image data to the database that server.py uses)
 
-6. Point your browser to 127.0.0.1:5000 or wherever addr it tells you.
+6. Run 'python -m flask run'
+
+7. Point your browser to 127.0.0.1:5000 or wherever addr it tells you.
