@@ -108,7 +108,7 @@ def sample_user_taste():
 def get_current_user(uid):
     return User.query.get(uid)
 
-def is_random_step(n_seen_img, init_thresh = 3):
+def is_random_step(init_thresh = 3):
     """
     if user has seen fewer than 3 images, always random step.
     otherwise random step according to temperature.
@@ -117,7 +117,10 @@ def is_random_step(n_seen_img, init_thresh = 3):
 
     n_seen_img = len(Score.query.filter_by(user_id=user.id).all())
 
+    print n_seen_img
+
     if n_seen_img < init_thresh:
+        print 'hi' # should print x3
         return True
     else:
         # does this modify the database entry?
@@ -187,13 +190,10 @@ def update_user_taste(score):
     # retrieve the Score objects produced by this user
     user_scores = Score.query.filter_by(user_id=user.id).all()
 
-    # TBD if this actually works
-    n_images = len(user_scores)
-
     # user_scores needs to be appropriately formatted for GPyOpt
 
     # determine which type of step
-    if is_random_step(user, n_images): # random step
+    if is_random_step(): # random step
         print 'random step'
         user.newest_image = uniform_random_image()
     else: # gpyopt step
