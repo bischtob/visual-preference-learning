@@ -1,128 +1,135 @@
-from flask import Flask, request
+# web app imports
+from flask import Flask, request, session
 from flask import render_template, redirect
+from flask_sqlalchemy import SQLAlchemy
+
+# machine learning imports
 import numpy as np
 from scipy.spatial import KDTree
 import GPyOpt
+
+#================================================ Startup
 
 STATIC_DIR = 'static'
 
 app = Flask(__name__)
 
+# TODO: something more secure...
+app.config['SECRET_KEY'] = 'adsfsafsa'
+
+#================================================ SQLAlchemy
+
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
+db = SQLAlchemy(app)
+
+# the user in the database
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    newest_image = db.Column(db.Integer)
+    temp = db.Column(db.Float)
+
+    def __init__(self, newest_image):
+        self.newest_image = newest_image
+        self.temp = 2.0
+
+
+class Score(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer)
+    image_id = db.Column(db.Integer)
+    score = db.Column(db.Integer)
+
+    def __init__(self, user_id, image_id, score):
+        self.user_id = user_id
+        self.image_id = image_id
+        self.score = score
+
+# this class should be populated offline and persisted
+class Images(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    fpath = db.Column(db.String)
+    # 128-dim numpy array
+    coord = db.Column(db.PickleType)
+
+    def __init__(self, fpath, coord):
+        self.fpath = fpath
+        self.coord = coord
+
 #================================================ Globals
 
-# these will become part of a database.
-
-data = {'imroot':'static/data/all/',
-        'fpaths':None,
-        'nn_tree':None,
-        'kmeans':None,
-        'images':None}
-
-user = {'means':None,
-        'counts':None,
-        'scores':None,
-        'score_prediction_error':None,
-        'seen_images':set(),
-        'seen':None,
-        'index':None,
-        'newest_image':None}
-        
+nn_tree = None
 
 #================================================ Helper functions
 
-def get_next_image():
+def get_img_from_scores(user_scores):
     """
-    Assumes newest_image was not None
+    user_scores is a list of db objects
+    we need the images to be in the same order as the scores
     """
-    global data, user
+    coords = []
+    for score in user_scores:
+        img = Images.query.get(score.image_id)
+        coord = img.coord
+        coords.append(coord)
 
-    # newest_image is a vector
-    # dumb method: use NN tree to locate path
-    dat,ind = data['nn_tree'].query(user['newest_image'], k=1)
-    ind = ind[0]
-    fpath = data['fpaths'][ind]
-
-    return localize_image_path(fpath)
+    return np.array(coords)
 
 
-def localize_image_path(fpath):
-    return data['imroot']+fpath.split('/')[-1][:-4] + ".jpg"
+def reshape_user_scores(user_scores):
+    """
+    Format user scores from database into a 2d numpy array so that 
+    GPyOpt can consume it as a parameter.
+    """
+    return np.array([np.array([s.score]) for s in user_scores])
+
+def get_newest_image_path():
+    """
+    Assumes newest_image is an id.
+    """
+    user = get_current_user(session.get('user_id'))
+
+    img = Images.query.get(user.newest_image)
+
+    print 'get newest image path'
+    print img.fpath
+    
+    return img.fpath
 
 
 def sample_user_taste():
     """
+    TODO
     Use GPy's estimation at this time step
     to provide a best-guess estimate for the user's taste.
     (we may not be able to do this per-iteration, but only once at the end.)
     """
-    global data, user
-
-    # ah, right...is this possible?
 
     return []
 
-#    (X_subset, Y_subset) = add_suggested_sample(user['myProblem'], 
+def get_current_user(uid):
+    return User.query.get(uid)
 
-
-def update_user_taste(score):
+def is_random_step(n_seen_img, init_thresh = 3):
     """
-    Update Gpy object with the new (image,score) pair
+    if user has seen fewer than 3 images, always random step.
+    otherwise random step according to temperature.
     """
-    global data, user
+    user = get_current_user(session.get('user_id'))
 
-    # print current score and prediction
-    print("user score is: " + str(score))
-    if user["score_prediction_error"] is not None:
-        print("user score prediction error is: " + str(user["score_prediction_error"]))
+    n_seen_img = len(Score.query.filter_by(user_id=user.id).all())
 
-    # update user's seen images
-    if user['seen'] is None:
-        user['seen'] = user['newest_image']
+    if n_seen_img < init_thresh:
+        return True
     else:
-        user['seen'] = np.vstack((user['seen'], user['newest_image']))
+        # does this modify the database entry?
+        (is_rand, user.temp) = annealing_step(user.temp)
 
- 
-    # add previous score to user's scores
-    if user['scores'] is None:
-        user['scores'] = np.atleast_2d(score)
-    else:
-        user['scores'] = np.vstack((user['scores'], score))
+         # commit the temperature update
+        db.session.commit()
+    
+        return is_rand
 
-    # determine which type of step
-    is_rand = False
-    if user['seen'].shape[0]<3:
-        is_rand = True
-    else:
-        (is_rand, user['temp']) = is_random_step(user['temp'])
-    print("evaluation step is random: " + str(is_rand))
-
-    # follow that step
-    if is_rand:
-        get_random_image()
-
-    else:
-        # run GPyOpt again
-        domain = [{'name':'whocares', 'type':'bandit', 'domain':data['images']}]
-
-        myProblem = GPyOpt.methods.BayesianOptimization(f = None,
-                                                        X = user['seen'],
-                                                        Y = user['scores'],
-                                                        normalize_Y = False,
-                                                        domain=domain)
-
-        # get next suggested sample
-        # (so we don't need to persist the GPyOpt problem)
-
-        user['newest_image'] = myProblem.suggested_sample
-        
-        # add score prediction to user object
-        mean_prediction, std_prediction = myProblem.model.predict(myProblem.suggested_sample)
-        if user['score_prediction_error'] is None:
-            user['score_prediction_error'] = np.atleast_2d(score-mean_prediction)
-        else:
-            user['score_prediction_error'] = np.vstack([user['score_prediction_error'], score-mean_prediction])
-
-def is_random_step(t, c=0.65):
+def annealing_step(t, c=0.65):
     """
     t temperature
     c adjustment to temp on random step
@@ -133,40 +140,126 @@ def is_random_step(t, c=0.65):
     else:
         return (True, t*c)
 
-def get_random_image():
-    global data, user
-    # get a random image to start
-    ri = np.random.randint(0, len(data['images']))
 
-    # kind of dumb since we're making get next image
-    # do unnecessary calculation...oh well
-    user['newest_image'] = np.atleast_2d(data['images'][ri])
- 
+
+def update_gpyopt(x, y):
+    """
+    Run GPyOpt with the current x and y. Return suggested_sample, 
+    squeezed to one dimension.
+
+    Has no reference to a user.
+    """
+    coords = np.array([img.coord for img in Images.query.all()])
+
+
+    # name doesn't matter
+    domain = [{'name':'x', 'type':'bandit', 'domain':coords}]
+
+    # f is not needed. Our problem is defined solely by X and Y.
+    myProblem = GPyOpt.methods.BayesianOptimization(f = None, 
+                                                    X = x,
+                                                    Y = y,
+                                                    domain=domain)
+
+    # get next suggested sample here, so we don't have to persist GPyOpt object.
+    gpy_next = myProblem.suggested_sample
+
+    # use nearest-neighbor to get next sample.
+    dat,ind = nn_tree.query(gpy_next, k=1)
+
+    # convert ndarray with one entry to int
+    return ind[0]
+
+
+def update_user_taste(score):
+    """
+    Update Gpy object with the new (image,score) pair
+    """
+    user = get_current_user(session.get('user_id'))
+
+    # create a new "Score" entry
+    db.session.add(Score(user_id=user.id, score=score, image_id=user.newest_image))
+    db.session.commit()
+
+    # retrieve the Score objects produced by this user
+    user_scores = Score.query.filter_by(user_id=user.id).all()
+
+    # TBD if this actually works
+    n_images = len(user_scores)
+
+    # user_scores needs to be appropriately formatted for GPyOpt
+
+    # determine which type of step
+    if is_random_step(user, n_images): # random step
+        print 'random step'
+        user.newest_image = uniform_random_image()
+    else: # gpyopt step
+        print 'gpyopt step'
+
+        # format for GPyOpt
+        images = get_img_from_scores(user_scores)
+        scores = reshape_user_scores(user_scores)
+
+        # run gpyopt and get next suggestion
+        user.newest_image = update_gpyopt(images, scores)
+
+
+    print user.newest_image    
+    # in all cases commit changes to database
+    db.session.commit()
+    
+
 def initialize_user():
     """
-    Get a random initial image
+    Get a random initial image, and set the user's temperature value.
+
+    TODO: manage user in session
+
     """
-    global data, user
 
-    get_random_image()
+    user = User(uniform_random_image())
 
-    user['temp'] = 2.0
+    db.session.add(user)
+    db.session.commit()
+
+    session['user_id'] = user.id
+
+    print 'user with id %d initialized' % session.get('user_id')
+
+    # login user, then can use current_user to do things?
+
+
+def uniform_random_image():
+    """
+    Return 'newest image' without gpyopt.
+    Used for random annealing steps and for initialization.
+    """
+    n_imgs = db.session.query(Images).count()
+    newest_image = np.random.randint(0, n_imgs)
+
+    return newest_image
 
 
 def initialize_data():
     """
-    Initialize the CNN embedding data and KDTree (for 
-    computing nearest-neighbors)
+    Initialize the KDTree (for computing nearest-neighbors)
+    TODO: persist this in filesystem
     """
-    global data, user
 
-    # initialize CNN embedding data
-    v = np.load('static/cnn_embedding.npz')
-    data['fpaths'] = v['fpaths']
-    data['images'] = v['emb']
+    global nn_tree
 
     # initialize Nearest-Neighbors tree
-    data['nn_tree'] = KDTree(data['images'])
+    coords = np.array([img.coord for img in Images.query.all()])
+    nn_tree = KDTree(coords)
+
+
+def consume_score(score):
+    """
+    Abstract these details away from the routing code.
+    """
+    score = 6-float(score)
+    gsn_noise = np.random.normal(scale=0.2)
+    update_user_taste(score+gsn_noise)
 
 
 #================================================ Flask logic
@@ -180,15 +273,14 @@ def init():
 def home():
     if request.method == 'GET':
         return render_template('index.html', 
-                image=get_next_image(),
+                image=get_newest_image_path(),
                 recs=sample_user_taste())
 
     if request.method == 'POST':
         # update user center estimate
-        score = 5-float(request.form['button_press'])
-        gsn_noise = np.random.normal(scale=0.2)
-        update_user_taste(score+gsn_noise)
+        consume_score(request.form['button_press'])
 
         # javascript will handle the refresh
         # 204 = no content
         return ('', 204)
+
