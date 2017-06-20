@@ -1,3 +1,6 @@
+# misc imports
+from __future__ import print_function
+
 # web app imports
 from flask import Flask, request, session
 from flask import render_template, redirect
@@ -44,6 +47,19 @@ class Score(db.Model):
         self.image_id = image_id
         self.score = score
 
+# used to assess GPyOpt model error
+class PredictedScore(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer)
+    image_id = db.Column(db.Integer)
+    score = db.Column(db.Integer)
+
+    def __init__(self, user_id, image_id, score):
+        self.user_id = user_id
+        self.image_id = image_id
+        self.score = score
+
+
 # this class should be populated offline and persisted
 class Images(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -82,10 +98,6 @@ def get_img_from_scores(user_scores):
         coord = img.coord
         coords.append(coord)
 
-    print ids_seen
-    print image_ids_seen
-    print np.array(coords)[:,:5]
-
     return np.array(coords)
 
 
@@ -104,8 +116,6 @@ def get_newest_image_path():
 
     img = Images.query.get(user.newest_image)
 
-    print img.fpath
-    
     return img.fpath
 
 
@@ -159,10 +169,13 @@ def annealing_step(t, c=0.65):
 def update_gpyopt(x, y):
     """
     Run GPyOpt with the current x and y. Return suggested_sample, 
-    squeezed to one dimension.
+    squeezed to one dimension. 
 
-    Has no reference to a user.
+    Also create PredictedScore object for the suggested sample.
     """
+
+    user = get_current_user(session.get('user_id'))
+
     coords = np.array([img.coord for img in Images.query.all()])
 
     # name doesn't matter
@@ -177,16 +190,21 @@ def update_gpyopt(x, y):
 
     # get next suggested sample here, so we don't have to persist GPyOpt object.
     gpy_next = myProblem.suggested_sample
-    print 'suggested sample'
-    print gpy_next
 
     # use nearest-neighbor to get next sample.
     dat,ind = nn_tree.query(gpy_next, k=1)
 
-    print dat, ind
+    # database is 1-indexed, so we need to add one.
+    image_id = ind[0]+1
+
+    # create PredictedScore
+    mean_prediction, std_prediction = myProblem.model.predict(gpy_next)
+    mp = mean_prediction[0][0] # mean prediction is 2d
+    db.session.add(PredictedScore(user.id, image_id, mp))
+    db.session.commit()
 
     # database is 1-indexed, so we need to add one.
-    return ind[0]+1
+    return image_id
 
 
 def update_user_taste(score):
@@ -207,10 +225,10 @@ def update_user_taste(score):
 
     # determine which type of step
     if is_random_step(): # random step
-        print 'random step'
+        print('random step')
         user.newest_image = uniform_random_image()
     else: # gpyopt step
-        print 'gpyopt step'
+        print('gpyopt step')
 
         # format for GPyOpt
         images = get_img_from_scores(user_scores)
@@ -218,9 +236,6 @@ def update_user_taste(score):
 
         # run gpyopt and get next suggestion
         user.newest_image = update_gpyopt(images, scores)
-
-    # NOTE: both update_gpyopt and uniform_random_image 
-    # must return 1-indexed values!
 
     # in all cases commit changes to database
     db.session.commit()
@@ -241,7 +256,7 @@ def initialize_user():
 
     session['user_id'] = user.id
 
-    print 'user with id %d initialized' % session.get('user_id')
+    print('user with id %d initialized' % session.get('user_id'))
 
     # login user, then can use current_user to do things?
 
@@ -301,4 +316,3 @@ def home():
         # javascript will handle the refresh
         # 204 = no content
         return ('', 204)
-
