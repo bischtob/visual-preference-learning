@@ -10,26 +10,42 @@ $(document).on('ready', function() {
     var fn = "centers/k"+k+"/list.html"; /* gives the file name*/
   
     /* destroy slick */
-   $('.regular').slick('unslick');
+    $('#slider').slick('unslick');
   
     /* load html (asynchronous, wait for successful callback) */
-    $('.regular').load(fn, function() {
+
+    /* We hide visiblity to prevent the user from seeing 
+     * the bare images flash before slick can run on them.
+     * we can't use .hide() because that sets display:none,
+     * which breaks slick.
+     *
+     * We use the callback on 'init' (see below) to 
+     * make the div visible again.
+     */
+    $('#slider').css('visibility', 'hidden');
+
+    $('#slider').load(fn, function() {
 
       // update slider
-      $('.regular').slick({
-       infinite: true,
-       slidesToShow: 1,
-       slidesToScroll: 1,
-     });
+      $('#slider').slick({
+        infinite: true,
+        slidesToShow: 1,
+        slidesToScroll: 1,
+      });
 
-     // update text
-     $('#n1').html(1);
-     $('#n2').html(k);
+      // update text
+      $('#n1').html(1);
+      $('#n2').html(k);
     });
-  
+
+  });
+
+  // used for update after clicking a kselect button
+  $('#slider').on('init', function() {
+    $('#slider').css('visibility', 'visible');
   });
   
-  $('.regular').on('afterChange', function (event, slide) {
+  $('#slider').on('afterChange', function (event, slide) {
     // we use 1-indexing for display
     var currentSlide = slide.currentSlide+1;
     console.log(currentSlide);
