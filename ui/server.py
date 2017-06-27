@@ -195,7 +195,8 @@ def update_gpyopt(x, y):
     dat,ind = nn_tree.query(gpy_next, k=1)
 
     # database is 1-indexed, so we need to add one.
-    image_id = ind[0]+1
+    # numpy int64s behaving funky
+    image_id = int(ind[0])+1
 
     # create PredictedScore
     mean_prediction, std_prediction = myProblem.model.predict(gpy_next)
@@ -203,7 +204,7 @@ def update_gpyopt(x, y):
     db.session.add(PredictedScore(user.id, image_id, mp))
     db.session.commit()
 
-    # database is 1-indexed, so we need to add one.
+    print('next image: %d' % image_id)
     return image_id
 
 
