@@ -15,7 +15,7 @@ tff = v['fpaths']
 tif = v['emb']
 
 for i in range(len(tff)):
-    fixed_im_path = imroot+tff[i].split('/')[-1]
+    fixed_im_path = imroot+(tff[i].split('/')[-1])[:-4]+'.jpg'
     db.session.add(Images(fixed_im_path, tif[i]))
 
 db.session.commit()
