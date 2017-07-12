@@ -25,8 +25,10 @@ app.config['SECRET_KEY'] = 'adsfsafsa'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
 db = SQLAlchemy(app)
 
-# the user in the database
 class User(db.Model):
+    """
+    Database object to model the user.
+    """
     id = db.Column(db.Integer, primary_key=True)
     newest_image = db.Column(db.Integer)
     temp = db.Column(db.Float)
@@ -37,6 +39,9 @@ class User(db.Model):
 
 
 class Score(db.Model):
+    """
+    For a given image and user, the score the user gave to the image.
+    """
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer)
     image_id = db.Column(db.Integer)
@@ -47,8 +52,12 @@ class Score(db.Model):
         self.image_id = image_id
         self.score = score
 
-# used to assess GPyOpt model error
+
 class PredictedScore(db.Model):
+    """
+    For a given image and user, the score GPyOpt expected that user to give.
+    """
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer)
     image_id = db.Column(db.Integer)
@@ -60,7 +69,6 @@ class PredictedScore(db.Model):
         self.score = score
 
 
-# this class should be populated offline and persisted
 class Images(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     fpath = db.Column(db.String)
@@ -71,9 +79,16 @@ class Images(db.Model):
         self.fpath = fpath
         self.coord = coord
 
-#================================================ Globals
+class NNTree(db.Model):
+    """
+    This table stores the single nearest-neighbor tree for all processes.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    tree = db.Column(db.PickleType)
 
-nn_tree = None
+    def __init__(self, tree):
+        self.tree = tree
+
 
 #================================================ Helper functions
 
@@ -112,6 +127,11 @@ def get_newest_image_path():
     """
     Assumes newest_image is an id.
     """
+
+    if 'user_id' not in session:
+        print('new user initialized')
+        initialize_user()
+
     user = get_current_user(session.get('user_id'))
 
     img = Images.query.get(user.newest_image)
@@ -176,7 +196,10 @@ def update_gpyopt(x, y):
 
     user = get_current_user(session.get('user_id'))
 
-    coords = np.array([img.coord for img in Images.query.all()])
+#    coords = np.array([img.coord for img in Images.query.all()])
+    
+    # reuse already existing coordinates instead of constructing new ones.
+    coords = nn_tree.data
 
     # name doesn't matter
     domain = [{'name':'whocares', 'type':'bandit', 'domain':coords}]
@@ -244,10 +267,9 @@ def update_user_taste(score):
 
 def initialize_user():
     """
-    Get a random initial image, and set the user's temperature value.
-
-    TODO: manage user in session
-
+    Initialize new user object with:
+        Random initial image
+        Temperature (for annealing, same initial val for all users)
     """
 
     user = User(uniform_random_image())
@@ -259,32 +281,18 @@ def initialize_user():
 
     print('user with id %d initialized' % session.get('user_id'))
 
-    # login user, then can use current_user to do things?
-
 
 def uniform_random_image():
     """
     Return 'newest image' without gpyopt.
     Used for random annealing steps and for initialization.
     """
+
     n_imgs = db.session.query(Images).count()
     newest_image = np.random.randint(0, n_imgs)
 
     # database is 1-indexed
     return newest_image+1
-
-
-def initialize_data():
-    """
-    Initialize the KDTree (for computing nearest-neighbors)
-    TODO: persist this in filesystem
-    """
-
-    global nn_tree
-
-    # initialize Nearest-Neighbors tree
-    coords = np.array([img.coord for img in Images.query.all()])
-    nn_tree = KDTree(coords)
 
 
 def consume_score(score):
@@ -297,11 +305,6 @@ def consume_score(score):
 
 
 #================================================ Flask logic
-
-@app.before_first_request
-def init():
-    initialize_data()
-    initialize_user()
 
 @app.route('/', methods= ['GET', 'POST'])
 def home():
@@ -317,3 +320,4 @@ def home():
         # javascript will handle the refresh
         # 204 = no content
         return ('', 204)
+

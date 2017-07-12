@@ -1,0 +1,16 @@
+total usage is ~0.28 GiB per process normally, and up to ~0.37 when GPyOpt is created.
+
+I wrote a small example script that reproduces the 0.25 GiB memory usage with just a few calls.
+
+basically, it comes from replications of the image coordinates in RAM (coordinates are about 0.09 GiB for one instance, so 0.28~=0.09*3)
+
+the DB query for image coordinates is inefficient by default. so you can get memory usage to go down 0.25 to 0.18 when you fix that.
+
+the NN tree I'm using has its own copy of the coordinates, like GPyOpt. so if we can deduplicate that it would go down to 0.09 GiB usage normally, and up to 0.18 when GPyOpt is running.
+
+it would be great if we could share the coordinates across everyone -- i.e. there's just some shared memory that every process and every actor (NN tree, GPyOpt, etc.) uses.
+
+but shared memory = lots of potential problems I think. like needing to keep track of locking, not corrupting memory, etc. could produce a lot of headaches.
+
+I think getting down to 0.09 normally and 0.18 when GPyOpt is running is what I will aim for right now. 
+

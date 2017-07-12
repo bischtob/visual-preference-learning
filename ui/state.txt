@@ -1,0 +1,6 @@
+this repo not pushed to remote yet
+sqlite "no such table" error when I try to add nn tree
+and then server code will need to be rewritten to incorporate the nn tree
+
+fix "no such table" error, seemingly.
+rewrite server code to incorporate this.
