@@ -4,10 +4,11 @@ html {
 body {
   font-family: 'Helvetica Neue', Helvetica, sans-serif;
   width: 100%;
+  margin: 0px;
 }
 
 div#main {
-  width: 400px;
+  width: 100%;
   margin-top: 100px;
   margin-left: auto;
   margin-right: auto;

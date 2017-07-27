@@ -1,6 +1,9 @@
 # image files (too big)
 ui/static/data/
 
+# instance folder
+ui/instance/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
