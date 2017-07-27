@@ -13,4 +13,3 @@ it would be great if we could share the coordinates across everyone -- i.e. ther
 but shared memory = lots of potential problems I think. like needing to keep track of locking, not corrupting memory, etc. could produce a lot of headaches.
 
 I think getting down to 0.09 normally and 0.18 when GPyOpt is running is what I will aim for right now. 
-

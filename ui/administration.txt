@@ -1,4 +1,0 @@
-sudo systemctl restart server
-sudo restart nginx
-/var/log/nginx
-/var/log/uwsgi/
