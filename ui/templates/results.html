@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <link rel="stylesheet" type="text/css" href="static/results.css">
+  <script src="static/jquery-1.12.0.min.js"></script>
+</head>
+<body>
+  <div id="main">
+<!--    <div style="width:100; float: left">-->
+    <h1>Top Results</h1><br>
+    {% for timage in top_images %}
+      <image src="{{ timage }}" width="125" /> 
+    {% endfor %}
+    <br><br><br><br>
+    <h1>Bottom Results</h1><br>
+    {% for timage in bottom_images %}
+      <image src="{{ timage }}" width="125" /> 
+    {% endfor %}
+
+<!--    </div>-->
+<!--    <div style="width:100; margin-left: 50px; float: left">
+    {% for bimage in bottom_images %}
+      <image src="{{ bimage }}" width="100" /><br> 
+    {% endfor %}
+    </div>
+    <div style="width:100; margin-left: 50px; float: left">
+    {% for rimage in random_images %}
+      <image src="{{rimage}}" width="100" /><br> 
+    {% endfor %}
+    </div>-->
+  </div>
+</body>

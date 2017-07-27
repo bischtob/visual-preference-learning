@@ -79,17 +79,6 @@ class Images(db.Model):
         self.fpath = fpath
         self.coord = coord
 
-class NNTree(db.Model):
-    """
-    This table stores the single nearest-neighbor tree for all processes.
-    """
-    id = db.Column(db.Integer, primary_key=True)
-    tree = db.Column(db.PickleType)
-
-    def __init__(self, tree):
-        self.tree = tree
-
-
 #================================================ Helper functions
 
 def get_img_from_scores(user_scores):
@@ -134,21 +123,117 @@ def get_newest_image_path():
 
     user = get_current_user(session.get('user_id'))
 
+    print(session.get('user_id'))
+
     img = Images.query.get(user.newest_image)
 
     return img.fpath
 
+def _return_random_coords():
+    
 
 def sample_user_taste():
     """
-    TODO
     Use GPy's estimation at this time step
     to provide a best-guess estimate for the user's taste.
-    (we may not be able to do this per-iteration, but only once at the end.)
+
+    Note: SLOW.
     """
+   # if 'user_id' not in session:
 
-    return []
+    user = get_current_user(session.get('user_id'))
 
+    coords = np.array([img.coord for img in Images.query.all()])
+    
+    # retrieve the Score objects produced by this user
+    user_scores = Score.query.filter_by(user_id=user.id).all()
+
+    # if too few scores, return random stuff
+#    if len(user_scores) < 2:
+#       [np.random.permutation(coords)[:25]]
+
+    # format for GPyOpt
+    images = get_img_from_scores(user_scores)
+    scores = reshape_user_scores(user_scores)
+
+    # name doesn't matter
+    domain = [{'name':'whocares', 'type':'bandit', 'domain':coords}]
+
+    # f is not needed. Our problem is defined solely by X and Y.
+    myProblem = GPyOpt.methods.BayesianOptimization(f = None,
+                                                    X = images,
+                                                    Y = scores,
+                                                    normalize_Y = False,
+                                                    domain=domain)
+
+    # iterate through all samples to find top and bottom
+    # TODO: naive brute-force method, can be improved
+    
+    nsamples = 25
+
+    # -1 as default index to cause error downstream if it's still around
+    best = [(-1, float('-inf'))]*nsamples
+    worst = [(-1, float('inf'))]*nsamples
+    
+    for i,coord in enumerate(coords):
+        mean_prediction, std_prediction = myProblem.model.predict(coord)
+        mp = mean_prediction[0][0] # mean prediction is 2d
+    
+        # remember that the problem is minimization? so best-worst 
+        # are flipped.
+        
+        mp = 6 - mp
+        
+        # replace the lowest 'high' value if mp is higher
+        (mini, minv) = _find_min(best)
+        if mp > minv:
+            # we are adding a tuple of the image index, and its predicted score.
+            # so we can retrieve the image path later from the index
+            best[mini] = (i, mp)
+        
+        # replace the highest "low" value if mp is lower
+        (maxi, maxv) = _find_max(worst)
+        if mp < maxv:
+            worst[maxi] = (i, mp)
+
+    # TODO: fill random
+    random = []
+    best_img_paths = _get_image_paths_from_list(best)
+    worst_img_paths = _get_image_paths_from_list(worst)
+    
+    return (best_img_paths, worst_img_paths, random)
+
+def _get_image_paths_from_list(l):
+    image_paths = []
+    for i,v in l:
+        # database is 1-indexed
+        img = Images.query.get(i+1)
+        image_paths.append(img.fpath) 
+
+    return image_paths
+    
+# naive: a min-heap would be better
+def _find_min(best):
+    mini = 0
+    minv = best[0][1]
+    for i,val in enumerate(best):
+        if val[1] < minv:
+            minv = val[1]
+            mini = i
+
+    return (mini, minv)
+
+
+def _find_max(worst):
+    maxi = 0
+    maxv = worst[0][1]
+    for i,val in enumerate(worst):
+        if val[1] > maxv:
+            maxv = val[1]
+            maxi = i
+
+    return (maxi, maxv)
+ 
 def get_current_user(uid):
     return User.query.get(uid)
 
@@ -196,11 +281,8 @@ def update_gpyopt(x, y):
 
     user = get_current_user(session.get('user_id'))
 
-#    coords = np.array([img.coord for img in Images.query.all()])
+    coords = np.array([img.coord for img in Images.query.all()])
     
-    # reuse already existing coordinates instead of constructing new ones.
-    coords = nn_tree.data
-
     # name doesn't matter
     domain = [{'name':'whocares', 'type':'bandit', 'domain':coords}]
 
@@ -213,14 +295,13 @@ def update_gpyopt(x, y):
 
     # get next suggested sample here, so we don't have to persist GPyOpt object.
     gpy_next = myProblem.suggested_sample
-
-    # use nearest-neighbor to get next sample.
-    dat,ind = nn_tree.query(gpy_next, k=1)
+    gpy_ind = myProblem.acquisition_optimizer.x_min_index
 
     # database is 1-indexed, so we need to add one.
     # numpy int64s behaving funky
-    image_id = int(ind[0])+1
-
+    image_id = int(gpy_ind)+1
+    print('image id from gpy field: %d' % image_id)
+    
     # create PredictedScore
     mean_prediction, std_prediction = myProblem.model.predict(gpy_next)
     mp = mean_prediction[0][0] # mean prediction is 2d
@@ -310,14 +391,25 @@ def consume_score(score):
 def home():
     if request.method == 'GET':
         return render_template('index.html', 
-                image=get_newest_image_path(),
-                recs=sample_user_taste())
+                image=get_newest_image_path())
 
     if request.method == 'POST':
-        # update user center estimate
-        consume_score(request.form['button_press'])
-
+        val = request.form['button_press']
+        if val=='reset':
+            initialize_user()
+        else:
+            # update user center estimate
+            consume_score(val)
+    
         # javascript will handle the refresh
         # 204 = no content
         return ('', 204)
+
+@app.route('/results', methods= ['GET'])
+def results():
+    (top_imgs, bottom_imgs, random_imgs) = sample_user_taste()
+    return render_template('results.html',
+        top_images = top_imgs,
+        bottom_images = bottom_imgs,
+        random_images = random_imgs)
 

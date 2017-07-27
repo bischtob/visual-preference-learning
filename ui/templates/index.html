@@ -1,16 +1,17 @@
 <!DOCTYPE html>
 <head>
   <meta charset="utf-8">
-  <link rel="stylesheet" type="text/css" href="static/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <link rel="stylesheet" type="text/css" href="static/index.css">
   <script src="static/jquery-1.12.0.min.js"></script>
 </head>
 <body>
   <div id="main">
-    <h2>boostcamphq rate-o-tron</h2>
-    <div id="imbox" style="width:250px; margin: auto;">
+    <h1>rate-o-tron</h1>
+    <div id="imbox" style="width:200px; margin: auto;">
       <image src="{{image}}" width="200" /><br>
       <!-- buttons for rating -->
-      <div id="buttons" style="width: 250px; margin-top: 10px;">
+      <div id="buttons" style="width: 200px; margin-top: 10px;">
         <div style="display: inline-block; height: 100%;">
           <input type="image" src="static/tinder_1.png" 
           style="opacity: 0.2;" value="0" />
@@ -26,24 +27,34 @@
       </div>
     </div>
     <br><br>
-    <div id="preference">
-      {% for rec in recs %}
-      <image src="{{rec}}" width="75" />
-      {% endfor %}
+    <div id="redirects">
+        <button value="results">show results so far</button>
+        <button value="reset">reset</button>
+<!--        <button value="clusters">browse k-means clusters</button>-->
     </div>
   </div>
 </body>
 
 <script>
   $(document).ready(function() {
-    $('input').click(function(v) {
+    // :input matches buttons too
+    $(':input').click(function(v) {
       // make a post request
       let val = v.target.value;
 
-      $.post("/", { 'button_press': val })
-        .done(function(data) {
-          window.location = '/';
-        }); 
+      if (val==='results') {
+        window.location = '/results';
+      }
+      else if (val==='clusters') {
+        window.location = '/static/slider/index.html';
+      }
+      else {
+        $.post("/", { 'button_press': val })
+          .done(function(data) {
+            window.location = '/';
+          }); 
+      }
+     
     });
   });
 </script>

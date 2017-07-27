@@ -1,0 +1,38 @@
+html {
+  width: 100%;
+}
+body {
+  font-family: 'Helvetica Neue', Helvetica, sans-serif;
+  width: 100%;
+}
+
+div#main {
+  width: 400px;
+  margin-top: 100px;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+input {
+  vertical-align: middle;
+  height: 100%;
+}
+input:focus {
+  outline:0;
+}
+
+button {
+  font-size: 16px;
+  cursor: pointer;
+  background-color: white;
+  margin-right: 7.5px;
+  margin-left: 7.5px;
+  border:none;
+}
+button:hover {
+  background-color: #d2f4ef;
+}
+button:focus {
+  outline:0;
+}
