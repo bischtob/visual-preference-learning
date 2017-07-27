@@ -1,5 +1,6 @@
 # misc imports
 from __future__ import print_function
+import os, sys
 
 # web app imports
 from flask import Flask, request, session
@@ -8,7 +9,6 @@ from flask_sqlalchemy import SQLAlchemy
 
 # machine learning imports
 import numpy as np
-from scipy.spatial import KDTree
 import GPyOpt
 
 #================================================ Startup
@@ -17,8 +17,20 @@ STATIC_DIR = 'static'
 
 app = Flask(__name__)
 
-# TODO: something more secure...
-app.config['SECRET_KEY'] = 'adsfsafsa'
+def read_secret_key(filename='secret_key'):
+    """
+    http://flask.pocoo.org/snippets/104/
+    """
+
+    filename = os.path.join(app.instance_path, filename)
+    try:
+        return open(filename, 'rb').read()
+    except IOError:
+        print('Error: No secret key.')
+        sys.exit(1)
+
+
+app.config['SECRET_KEY'] = read_secret_key()
 
 #================================================ SQLAlchemy
 
@@ -129,74 +141,79 @@ def get_newest_image_path():
 
     return img.fpath
 
-def _return_random_coords():
-    
 
-def sample_user_taste():
+def sample_user_taste(nsamples = 25):
     """
     Use GPy's estimation at this time step
     to provide a best-guess estimate for the user's taste.
 
     Note: SLOW.
     """
-   # if 'user_id' not in session:
 
-    user = get_current_user(session.get('user_id'))
-
-    coords = np.array([img.coord for img in Images.query.all()])
+    # if user does not exist, return random stuff
+    if 'user_id' not in session:
+        best = np.random.randint(0, len(coords), nsamples)
+        worst = np.random.randint(0, len(coords), nsamples)
+    else:
+        user = get_current_user(session.get('user_id'))
     
-    # retrieve the Score objects produced by this user
-    user_scores = Score.query.filter_by(user_id=user.id).all()
-
-    # if too few scores, return random stuff
-#    if len(user_scores) < 2:
-#       [np.random.permutation(coords)[:25]]
-
-    # format for GPyOpt
-    images = get_img_from_scores(user_scores)
-    scores = reshape_user_scores(user_scores)
-
-    # name doesn't matter
-    domain = [{'name':'whocares', 'type':'bandit', 'domain':coords}]
-
-    # f is not needed. Our problem is defined solely by X and Y.
-    myProblem = GPyOpt.methods.BayesianOptimization(f = None,
-                                                    X = images,
-                                                    Y = scores,
-                                                    normalize_Y = False,
-                                                    domain=domain)
-
-    # iterate through all samples to find top and bottom
-    # TODO: naive brute-force method, can be improved
-    
-    nsamples = 25
-
-    # -1 as default index to cause error downstream if it's still around
-    best = [(-1, float('-inf'))]*nsamples
-    worst = [(-1, float('inf'))]*nsamples
-    
-    for i,coord in enumerate(coords):
-        mean_prediction, std_prediction = myProblem.model.predict(coord)
-        mp = mean_prediction[0][0] # mean prediction is 2d
-    
-        # remember that the problem is minimization? so best-worst 
-        # are flipped.
+        coords = np.array([img.coord for img in Images.query.all()])
         
-        mp = 6 - mp
+        # retrieve the Score objects produced by this user
+        user_scores = Score.query.filter_by(user_id=user.id).all()
+    
+        # if too few scores, return random stuff
+        if len(user_scores) < 2:
+            best = np.random.randint(0, len(coords), nsamples)
+            worst = np.random.randint(0, len(coords), nsamples)
+        else:
+            # format for GPyOpt
+            images = get_img_from_scores(user_scores)
+            scores = reshape_user_scores(user_scores)
         
-        # replace the lowest 'high' value if mp is higher
-        (mini, minv) = _find_min(best)
-        if mp > minv:
-            # we are adding a tuple of the image index, and its predicted score.
-            # so we can retrieve the image path later from the index
-            best[mini] = (i, mp)
+            # name doesn't matter
+            domain = [{'name':'whocares', 'type':'bandit', 'domain':coords}]
         
-        # replace the highest "low" value if mp is lower
-        (maxi, maxv) = _find_max(worst)
-        if mp < maxv:
-            worst[maxi] = (i, mp)
+            # f is not needed. Our problem is defined solely by X and Y.
+            myProblem = GPyOpt.methods.BayesianOptimization(f = None,
+                                                            X = images,
+                                                            Y = scores,
+                                                            normalize_Y = False,
+                                                            domain=domain)
+        
+            # iterate through all samples to find top and bottom
+            # TODO: naive brute-force method, can be improved
+            
+            # -1 as default index to cause error downstream if it's still around
+            best = [(-1, float('-inf'))]*nsamples
+            worst = [(-1, float('inf'))]*nsamples
+            
+            for i,coord in enumerate(coords):
+                mean_prediction, std_prediction = myProblem.model.predict(coord)
+                mp = mean_prediction[0][0] # mean prediction is 2d
+            
+                # remember that the problem is minimization? so best-worst 
+                # are flipped.
+                
+                mp = 6 - mp
+                
+                # replace the lowest 'high' value if mp is higher
+                (mini, minv) = _find_min(best)
+                if mp > minv:
+                    # we are adding a tuple of the image index, and its predicted score.
+                    # so we can retrieve the image path later from the index
+                    best[mini] = (i, mp)
+                
+                # replace the highest "low" value if mp is lower
+                (maxi, maxv) = _find_max(worst)
+                if mp < maxv:
+                    worst[maxi] = (i, mp)
 
-    # TODO: fill random
+            # change format of best/worst
+            best = [b[0] for b in best]
+            worst = [w[0] for w in worst]
+    
+    # TODO: fill random?
     random = []
     best_img_paths = _get_image_paths_from_list(best)
     worst_img_paths = _get_image_paths_from_list(worst)
@@ -205,9 +222,10 @@ def sample_user_taste():
 
 def _get_image_paths_from_list(l):
     image_paths = []
-    for i,v in l:
+    for i in l:
         # database is 1-indexed
-        img = Images.query.get(i+1)
+        # also, make sure int is not a numpy int
+        img = Images.query.get(int(i)+1)
         image_paths.append(img.fpath) 
 
     return image_paths
